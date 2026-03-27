@@ -23,6 +23,8 @@
 - **视觉反馈**：选中高亮、悬停效果、操作提示
 - **网格背景**：辅助对齐的网格背景
 - **贝塞尔曲线**：美观的节点连接线
+- <img width="1166" height="840" alt="image" src="https://github.com/user-attachments/assets/14dccda7-5b4e-4a46-a996-311124ff2ac5" />
+
 
 ## 📦 安装依赖
 
