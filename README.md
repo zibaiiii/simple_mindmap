@@ -191,20 +191,6 @@ src/
 | `autoLayout` | `()` | 自动布局所有节点 |
 | `updateNodeSize` | `(id: string, w: number, h: number)` | 更新节点尺寸 |
 
-## 🐛 常见问题
-
-### Q: 节点无法拖拽
-A: 确保 Pinia Store 中的 `dragNodeId` 和 `offset` 状态正确更新
-
-### Q: 公式不渲染
-A: 检查 KaTeX 是否正确导入，公式语法为 `$公式$`
-
-### Q: 连接线位置偏移
-A: 节点尺寸变化后需要调用 `updateNodeSize` 更新存储
-
-### Q: 性能问题
-A: 大量节点时建议启用虚拟滚动（当前版本未实现）
-
 ## 📄 许可证
 
 MIT License
