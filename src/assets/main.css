@@ -1,0 +1,36 @@
+/* src/assets/main.css */
+body, html, #app {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  font-family: sans-serif;
+  .mindmap-container {
+  /* 使用背景图制作网格点 */
+  background-image: radial-gradient(#cbd5e1 1px, transparent 1px);
+  background-size: 40px 40px; /* 这个大小会随画布移动，但我们通过背景定位来同步它 */
+  background-color: #f1f5f9;
+  cursor: grab;
+}
+
+.mindmap-container:active {
+  cursor: grabbing;
+}
+
+.svg-canvas {
+  display: block;
+  user-select: none;
+}
+
+.zoom-info {
+  margin-right: 15px;
+  font-size: 12px;
+  color: #64748b;
+  font-weight: bold;
+}
+
+.node-group {
+  cursor: pointer;
+}
+}
