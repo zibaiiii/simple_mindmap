@@ -12,6 +12,8 @@ export interface MindNode {
   height: number  // 气泡高度
   isCollapsed?: boolean //是否收起子节点
   color?: string // 节点背景颜色
+  fontSize?: number;   // 字体大小 (px)
+  isBold?: boolean;    // 是否加粗
 }
 
 export const useMindMapStore = defineStore('mindmap', {
@@ -30,6 +32,37 @@ export const useMindMapStore = defineStore('mindmap', {
   }),
 
   actions: {
+    //查找
+    expandToNode(nodeId: string) {
+      const node = this.nodes.find(n => n.id === nodeId)
+      if (!node || !node.parentId) return
+
+      // 递归向上将所有父节点设为非折叠状态
+      let currentParentId = node.parentId
+      while (currentParentId) {
+        const parent = this.nodes.find(n => n.id === currentParentId)
+        if (parent) {
+          parent.isCollapsed = false
+          currentParentId = parent.parentId || ''
+        } else {
+          break
+        }
+      }
+    } ,
+    //更新字体大小
+    updateNodeFont(id: string, sizeDelta: number, toggleBold: boolean = false) {
+      const node = this.nodes.find(n => n.id === id)
+      if (node) {
+        if (sizeDelta !== 0) {
+          // 限制字体大小在 12px - 32px 之间
+          const currentSize = node.fontSize || 14
+          node.fontSize = Math.min(Math.max(currentSize + sizeDelta, 12), 32)
+        }
+        if (toggleBold) {
+          node.isBold = !node.isBold
+        }
+      }
+    },
     // 更新节点文本气泡大小
     updateNodeSize(id: string, width: number, height: number) {
       const node = this.nodes.find(n => n.id === id)

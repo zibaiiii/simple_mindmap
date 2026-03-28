@@ -16,6 +16,29 @@
         <button class="tool-btn" @click="store.autoLayout" title="自动布局">🪄 布局</button>
         <button class="tool-btn" @click="resetView" title="重置视角">🎯 重置</button>
       </div>
+      <div class="search-group">
+         <div class="search-input-wrapper">
+           <span class="search-icon">🔍</span>
+           <input v-model="searchQuery" 
+                  class="search-input" 
+                  placeholder="搜索节点..." 
+                  @keyup.enter="searchResults[0] && focusNode(searchResults[0].id)" />
+            
+            <!-- 搜索结果下拉面板 -->
+            <div v-if="searchQuery && searchResults.length" class="search-dropdown">
+              <div v-for="res in searchResults" 
+                   :key="res.id" 
+                   class="search-item" 
+                   @click="focusNode(res.id)">
+                <span class="res-text">{{ res.text.replace(/\$/g, '') }}</span>
+                <span class="res-type">{{ res.parentId ? '子节点' : '根节点' }}</span>
+              </div>
+            </div>
+            <div v-else-if="searchQuery" class="search-dropdown no-res">无匹配结果</div>
+          </div>
+        </div>
+
+  <div class="separator"></div>
 
       <!-- 分隔线 -->
       <div class="separator" v-if="selectedId"></div>
@@ -23,6 +46,15 @@
       <!-- 节点操作组：仅在选中节点时显示 -->
       <div class="tool-group animate-in" v-if="selectedId">
         <button class="tool-btn primary" @click="store.addChild(selectedId!)">➕ 子节点</button>
+          <!-- 字体控制 -->
+        <div class="font-controls">
+          <button class="icon-btn" @click="store.updateNodeFont(selectedId!, 2)" title="变大">A+</button>
+          <button class="icon-btn" @click="store.updateNodeFont(selectedId!, -2)" title="变小">A-</button>
+          <button class="icon-btn bold-btn" 
+                  :class="{ active: store.nodes.find(n => n.id === selectedId)?.isBold }"
+                  @click="store.updateNodeFont(selectedId!, 0, true)" title="加粗">B</button>
+        </div>
+        <!-- 节点颜色控制 -->
         <div class="color-picker">
           <div v-for="color in colorPresets" 
               :key="color"
@@ -63,8 +95,17 @@
               
               <div class="node-box" 
               :class="{ 'is-selected': selectedId === node.id }"
-              :style="{ backgroundColor: node.color || '#ffffff' }">
-                <input v-if="node.isEditing" v-model="node.text" @blur="node.isEditing = false" @keydown.enter="node.isEditing = false" v-focus />
+              :style="{ 
+                         backgroundColor: node.color || '#ffffff',
+                         fontSize: (node.fontSize || 14) + 'px',
+                         fontWeight: node.isBold ? 'bold' : 'normal'
+                      }">
+                <input v-if="node.isEditing" 
+                       v-model="node.text" 
+                       @blur="node.isEditing = false" 
+                       @keydown.enter="node.isEditing = false" 
+                       v-focus
+                       :style="{ fontSize: 'inherit', fontWeight: 'inherit' }" />
                 <div v-else @dblclick.stop="node.isEditing = true" v-html="renderKatex(node.text)"></div>
                 
                 <div v-if="hasChildren(node.id)" class="collapse-btn" @click.stop="store.toggleCollapse(node.id)">
@@ -249,6 +290,47 @@ const vObserveSize = {
 }
 
 const vFocus = { mounted: (el: HTMLInputElement) => el.focus() }
+
+//=========================================================
+//搜索
+const searchQuery = ref('')
+
+// 搜索过滤：排除空字符串，匹配文本内容
+const searchResults = computed(() => {
+  const query = searchQuery.value.trim().toLowerCase()
+  if (!query) return []
+  return store.nodes.filter(node => 
+    node.text.toLowerCase().includes(query)
+  ).slice(0, 5) // 最多显示5条结果
+})
+
+// 定位节点的核心函数
+const focusNode = (nodeId: string) => {
+  const node = store.nodes.find(n => n.id === nodeId)
+  if (!node) return
+
+  // 1. 确保节点可见（展开父级）
+  store.expandToNode(nodeId)
+  
+  // 2. 选中节点
+  selectedId.value = nodeId
+
+  // 3. 动画定位：计算将节点移动到屏幕中心所需的平移量
+  // 公式：平移量 = 屏幕中心 - (节点坐标 * 缩放)
+  const centerX = window.innerWidth / 2
+  const centerY = window.innerHeight / 2
+  
+  // 考虑到节点自身的宽度和高度，让中心对准节点中心
+  const nodeCenterX = node.x + (node.width || 100) / 2
+  const nodeCenterY = node.y + (node.height || 40) / 2
+
+  viewTransform.x = centerX - nodeCenterX * viewTransform.scale
+  viewTransform.y = centerY - nodeCenterY * viewTransform.scale
+
+  // 4. 清空搜索
+  searchQuery.value = ''
+//=============================================
+}
 </script>
 
 <style scoped>
@@ -413,5 +495,132 @@ const vFocus = { mounted: (el: HTMLInputElement) => el.focus() }
   font-size: 11px;
   color: #94a3b8;
   border: 1px solid #e2e8f0;
+}
+
+.font-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px;
+  border-left: 1px solid #e2e8f0;
+}
+
+.icon-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  transition: all 0.2s;
+}
+
+.icon-btn:hover {
+  background: #f1f5f9;
+  color: #1e293b;
+}
+
+.icon-btn.active {
+  background: #e0f2fe;
+  color: #0284c7;
+  border-color: #bae6fd;
+}
+
+.bold-btn {
+  font-family: serif;
+  font-size: 14px;
+}
+/* 搜索组样式 */
+.search-group {
+  display: flex;
+  align-items: center;
+}
+
+.search-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  background: #f1f5f9;
+  border-radius: 6px;
+  padding: 4px 8px;
+  width: 150px;
+  transition: width 0.3s;
+}
+
+.search-input-wrapper:focus-within {
+  width: 220px;
+  background: white;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.search-icon {
+  font-size: 12px;
+  margin-right: 6px;
+  color: #94a3b8;
+}
+
+.search-input {
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 13px;
+  width: 100%;
+}
+
+/* 搜索下拉框 */
+.search-dropdown {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 0;
+  width: 100%;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
+  border: 1px solid #e2e8f0;
+  overflow: hidden;
+  z-index: 1000;
+}
+
+.search-item {
+  padding: 8px 12px;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: background 0.2s;
+}
+
+.search-item:hover {
+  background: #f8fafc;
+}
+
+.res-text {
+  font-size: 13px;
+  color: #1e293b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
+}
+
+.res-type {
+  font-size: 10px;
+  color: #94a3b8;
+  background: #f1f5f9;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+
+.no-res {
+  padding: 8px;
+  font-size: 12px;
+  color: #94a3b8;
+  text-align: center;
 }
 </style>
