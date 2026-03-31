@@ -1,6 +1,6 @@
 <template>
   <div class="mindmap-container" 
-     :style="{ backgroundPosition: `${viewTransform.x}px ${viewTransform.y}px` }"
+       :style="{ backgroundPosition: `${viewTransform.x}px ${viewTransform.y}px` }"
        @wheel.prevent="onWheel"
        @mousedown="startPanning"
        @mousemove="handleMouseMove" 
@@ -9,108 +9,73 @@
        @click="deselect">
     
     <!-- 1. 顶部整合工具栏 -->
-    <div class="toolbar" @mousedown.stop>
-      <!-- 画布操作组 -->
-      <div class="tool-group">
-        <span class="zoom-info">{{ Math.round(viewTransform.scale * 100) }}%</span>
-        <button class="tool-btn" @click="store.autoLayout" title="自动布局">🪄 布局</button>
-        <button class="tool-btn" @click="resetView" title="重置视角">🎯 重置</button>
-      </div>
-      <div class="search-group">
-         <div class="search-input-wrapper">
-           <span class="search-icon">🔍</span>
-           <input v-model="searchQuery" 
-                  class="search-input" 
-                  placeholder="搜索节点..." 
-                  @keyup.enter="searchResults[0] && focusNode(searchResults[0].id)" />
+    <div class="toolbar-wrapper">
+      <div class="toolbar" ref="toolbarRef" @wheel.stop="handleToolbarWheel">    
+        <!-- 搜索组 -->
+        <div class="search-group">
+          <div class="search-input-wrapper">
+            <span class="search-icon">🔍</span>
+            <input v-model="searchQuery" class="search-input" placeholder="搜索节点..." @keyup.enter="searchResults.length && focusNode(searchResults[0].id)" />
             
-            <!-- 搜索结果下拉面板 -->
+            <!-- 搜索结果列表 -->
             <div v-if="searchQuery && searchResults.length" class="search-dropdown">
-              <div v-for="res in searchResults" 
-                   :key="res.id" 
-                   class="search-item" 
-                   @click="focusNode(res.id)">
+              <div v-for="res in searchResults" :key="res.id" class="search-item" @click.stop="focusNode(res.id)">
                 <span class="res-text">{{ res.text.replace(/\$/g, '') }}</span>
-                <span class="res-type">{{ res.parentId ? '子节点' : '根节点' }}</span>
+                <span class="res-type">{{ res.parentId ? '子' : '根' }}</span>
               </div>
             </div>
-            <div v-else-if="searchQuery" class="search-dropdown no-res">无匹配结果</div>
           </div>
         </div>
 
-  <div class="separator"></div>
+        <div class="separator"></div>
 
-      <!-- 分隔线 -->
-      <div class="separator" v-if="selectedId"></div>
-
-      <!-- 节点操作组：仅在选中节点时显示 -->
-      <div class="tool-group animate-in" v-if="selectedId">
-        <button class="tool-btn primary" @click="store.addChild(selectedId!)">➕ 子节点</button>
-          <!-- 字体控制 -->
-        <div class="font-controls">
-          <button class="icon-btn" @click="store.updateNodeFont(selectedId!, 2)" title="变大">A+</button>
-          <button class="icon-btn" @click="store.updateNodeFont(selectedId!, -2)" title="变小">A-</button>
-          <button class="icon-btn bold-btn" 
-                  :class="{ active: store.nodes.find(n => n.id === selectedId)?.isBold }"
-                  @click="store.updateNodeFont(selectedId!, 0, true)" title="加粗">B</button>
+        <!-- 画布工具 -->
+        <div class="tool-group">
+          <span class="zoom-info">{{ Math.round(viewTransform.scale * 100) }}%</span>
+          <button class="tool-btn icon-only" @click="store.autoLayout" title="自动布局">🪄</button>
+          <button class="tool-btn icon-only" @click="resetView" title="重置视角">🎯</button>
         </div>
-        <!-- 节点颜色控制 -->
-        <div class="color-picker">
-          <div v-for="color in colorPresets" 
-              :key="color"
-              class="color-dot"
-              :style="{ backgroundColor: color }"
-              @click="store.updateNodeColor(selectedId!, color)">
+
+        <!-- 节点工具 (选中时显示) -->
+        <template v-if="selectedId">
+          <div class="separator"></div>
+          <div class="tool-group animate-in">
+            <button class="tool-btn primary" @click="store.addChild(selectedId!)" title="添加子节点">➕</button>
+
+            <div class="font-controls">
+              <button class="icon-btn" @click="store.updateNodeFont(selectedId!, 2)">A+</button>
+              <button class="icon-btn" @click="store.updateNodeFont(selectedId!, -2)">A-</button>
+              <button class="icon-btn" :class="{ active: isCurrentBold }" @click="store.updateNodeFont(selectedId!, 0, true)">B</button>
+            </div>
+          
+            <div class="color-picker">
+              <div v-for="color in colorPresets" :key="color" class="color-dot" :style="{ backgroundColor: color }" @click="store.updateNodeColor(selectedId!, color)"></div>
+            </div>
+          
+            <div class="action-group">
+              <button class="tool-btn icon-only" @click="store.copyBranch(selectedId!)" title="复制">📄</button>
+              <button class="tool-btn icon-only" :disabled="!store.clipboard?.length" @click="store.pasteBranch(selectedId!)" title="粘贴">📋</button>
+              <button class="tool-btn icon-only danger" @click="deleteSelectedNode" title="删除">🗑️</button>
+            </div>
           </div>
-        </div>
-        <button class="tool-btn" @click="store.copyBranch(selectedId!)">📄 复制</button>
-        <button class="tool-btn" 
-                :disabled="!store.clipboard.length" 
-                @click="store.pasteBranch(selectedId!)">📋 粘贴</button>
-        <button class="tool-btn danger" @click="deleteSelectedNode">🗑️ 删除</button>
+        </template>
       </div>
     </div>
 
+    <!-- SVG 画布部分保持不变 -->
     <svg width="100%" height="100vh" class="svg-canvas" @dblclick="handleCanvasDblClick">
-      <g :transform="`translate(${viewTransform.x}, ${viewTransform.y}) scale(${viewTransform.scale})`">
-        
-        <!-- 连线 -->
+       <!-- ... 内部代码与你之前的一致 ... -->
+       <g :transform="`translate(${viewTransform.x}, ${viewTransform.y}) scale(${viewTransform.scale})`">
         <g class="lines">
-          <path v-for="line in visibleConnections" :key="line.id"
-            :d="generatePath(line)"
-            stroke="#cbd5e1" stroke-width="2" fill="none" />
+          <path v-for="line in visibleConnections" :key="line.id" :d="generatePath(line)" stroke="#cbd5e1" stroke-width="2" fill="none" />
         </g>
-
-        <!-- 节点 -->
-        <g v-for="node in visibleNodes" :key="node.id" 
-           :transform="`translate(${node.x}, ${node.y})`"
-           @mousedown.stop="onMouseDownNode($event, node)"
-           @contextmenu.prevent
-           class="node-group">
-          
+        <g v-for="node in visibleNodes" :key="node.id" :transform="`translate(${node.x}, ${node.y})`" @mousedown.stop="onMouseDownNode($event, node)" @contextmenu.prevent class="node-group">
           <foreignObject :width="node.width || 200" :height="node.height || 100" overflow="visible">
-            <div class="node-wrapper" 
-                 v-observe-size="node.id" 
-                 :style="{ width: 'max-content', minWidth: '100px' }">
-              
-              <div class="node-box" 
-              :class="{ 'is-selected': selectedId === node.id }"
-              :style="{ 
-                         backgroundColor: node.color || '#ffffff',
-                         fontSize: (node.fontSize || 14) + 'px',
-                         fontWeight: node.isBold ? 'bold' : 'normal'
-                      }">
-                <input v-if="node.isEditing" 
-                       v-model="node.text" 
-                       @blur="node.isEditing = false" 
-                       @keydown.enter="node.isEditing = false" 
-                       v-focus
-                       :style="{ fontSize: 'inherit', fontWeight: 'inherit' }" />
+            <div class="node-wrapper" v-observe-size="node.id" :style="{ width: 'max-content', minWidth: '100px' }">
+              <div class="node-box" :class="{ 'is-selected': selectedId === node.id }" :style="{ backgroundColor: node.color || '#ffffff', fontSize: (node.fontSize || 14) + 'px', fontWeight: node.isBold ? 'bold' : 'normal' }">
+                <input v-if="node.isEditing" v-model="node.text" @blur="node.isEditing = false" @keydown.enter="node.isEditing = false" v-focus :style="{ fontSize: 'inherit', fontWeight: 'inherit' }" />
                 <div v-else @dblclick.stop="node.isEditing = true" v-html="renderKatex(node.text)"></div>
-                
-                <div v-if="hasChildren(node.id)" class="collapse-btn" @click.stop="store.toggleCollapse(node.id)">
-                  {{ node.isCollapsed ? '+' : '-' }}
-                </div>
+                <div v-if="hasChildren(node.id)" class="collapse-btn" @click.stop="store.toggleCollapse(node.id)">{{ node.isCollapsed ? '+' : '-' }}</div>
               </div>
             </div>
           </foreignObject>
@@ -118,17 +83,59 @@
       </g>
     </svg>
 
-    <div class="help-tip">
-      双击空白处: 新建主题 | 双击节点: 编辑 ($公式$) | 选中节点以显示更多操作
-    </div>
+    <div class="help-tip">双击空白处: 新建主题 | 双击节点: 编辑 | 选中节点以显示更多操作</div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useMindMapStore, type MindNode } from '../stores/mindmap'
 import katex from 'katex'
 import 'katex/dist/katex.min.css'
+
+
+const toolbarRef = ref<HTMLElement | null>(null)
+const isAtStart = ref(true)
+const isAtEnd = ref(false)
+const showScrollBtns = ref(false)
+
+// 检查是否需要显示滚动按钮
+const updateScrollStatus = () => {
+  if (!toolbarRef.value) return
+  const { scrollLeft, scrollWidth, clientWidth } = toolbarRef.value
+  isAtStart.value = scrollLeft <= 0
+  isAtEnd.value = scrollLeft + clientWidth >= scrollWidth - 1
+  showScrollBtns.value = scrollWidth > clientWidth
+}
+
+// 按钮点击滚动
+const scrollToolbar = (distance: number) => {
+  toolbarRef.value?.scrollBy({ left: distance, behavior: 'smooth' })
+}
+
+// 鼠标滚轮在工具栏上时转化为横向滚动
+const handleToolbarWheel = (e: WheelEvent) => {
+  if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+    toolbarRef.value?.scrollBy({ left: e.deltaY, behavior: 'auto' })
+  }
+}
+
+// 监听窗口大小变化
+const resizeObserverToolbar = new ResizeObserver(updateScrollStatus)
+
+onMounted(() => {
+  if (toolbarRef.value) resizeObserverToolbar.observe(toolbarRef.value)
+  updateScrollStatus()
+})
+
+onUnmounted(() => {
+  resizeObserverToolbar.disconnect()
+})
+
+// 计算属性：当前节点是否加粗 (用于图标高亮)
+const isCurrentBold = computed(() => {
+  return store.nodes.find(n => n.id === selectedId.value)?.isBold
+})
 
 const store = useMindMapStore()
 const selectedId = ref<string | null>(null)
@@ -337,290 +344,131 @@ const focusNode = (nodeId: string) => {
 .mindmap-container {
   width: 100vw;
   height: 100vh;
-  background-color: #f1f5f9;
+  background-color: #f8fafc;
   background-image: radial-gradient(#cbd5e1 1px, transparent 1px);
   background-size: 30px 30px;
   position: relative;
   overflow: hidden;
-  cursor: grab;
 }
-.mindmap-container:active { cursor: grabbing; }
 
-/* 顶部工具栏样式升级 */
-.toolbar {
+/* 顶部工具栏包装器 */
+.toolbar-wrapper {
   position: absolute;
-  top: 20px;
+  top: 15px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 100;
+  z-index: 1000;
+  max-width: 90vw; /* 限制最大宽度 */
   display: flex;
-  align-items: center;
-  background: white;
-  padding: 6px 12px;
-  border-radius: 12px;
-  box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1);
-  border: 1px solid #e2e8f0;
-  gap: 8px;
+  pointer-events: none;
 }
 
-.tool-group {
+/* 工具栏胶囊主体 */
+.toolbar {
+  pointer-events: auto;
   display: flex;
   align-items: center;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(8px);
+  padding: 6px 16px;
+  border-radius: 50px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+  border: 1px solid #e2e8f0;
+  gap: 8px;
+  overflow-x: auto; /* 允许横向滚动 */
+  scrollbar-width: none;
+  flex-wrap: nowrap;
+}
+.toolbar::-webkit-scrollbar { display: none; }
+
+/* 基础组容器：禁止缩小 */
+.search-group, .tool-group, .font-controls, .action-group {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0; /* 禁止被挤压 */
   gap: 6px;
 }
 
-.separator {
-  width: 1px;
-  height: 24px;
-  background: #e2e8f0;
-  margin: 0 4px;
-}
-
-.tool-btn {
+/* 按钮统一高度 */
+.tool-btn, .icon-btn {
+  height: 34px;
+  min-width: 34px;
+  border: 1px solid #e2e8f0;
   background: white;
-  border: 1px solid transparent;
-  padding: 6px 12px;
   border-radius: 8px;
   cursor: pointer;
-  font-size: 13px;
-  font-weight: 500;
-  color: #475569;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   transition: all 0.2s;
-  white-space: nowrap;
+  flex-shrink: 0;
 }
-
-.tool-btn:hover:not(:disabled) {
-  background: #f1f5f9;
-  color: #1e293b;
-}
+.tool-btn:hover { background: #f1f5f9; }
 
 .tool-btn.primary {
   background: #3b82f6;
   color: white;
-}
-.tool-btn.primary:hover { background: #2563eb; }
-
-.tool-btn.danger:hover {
-  background: #fef2f2;
-  color: #ef4444;
-  border-color: #fee2e2;
+  border: none;
+  padding: 0 12px;
+  font-weight: bold;
 }
 
-.tool-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
+.tool-btn.danger:hover { color: #ef4444; border-color: #fee2e2; background: #fef2f2; }
 
-.zoom-info {
-  font-size: 12px;
-  font-weight: 700;
-  color: #64748b;
-  min-width: 45px;
-  text-align: center;
-}
-/* 颜色选择器容器 */
-.color-picker {
+/* 搜索框 */
+.search-input-wrapper {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 4px;
-  margin: 0 8px;
-  padding: 0 8px;
-  border-left: 1px solid #e2e8f0;
-  border-right: 1px solid #e2e8f0;
+  background: #f1f5f9;
+  padding: 0 10px;
+  border-radius: 20px;
+  height: 34px;
+  width: 140px;
+  flex-shrink: 0;
+  transition: width 0.3s;
 }
+.search-input-wrapper:focus-within { width: 200px; background: white; box-shadow: 0 0 0 2px #3b82f633; }
+.search-input { border: none; background: transparent; outline: none; font-size: 13px; width: 100%; }
 
-/* 颜色小圆点 */
-.color-dot {
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  border: 1px solid #cbd5e1;
-  cursor: pointer;
-  transition: transform 0.1s, border-color 0.2s;
+.search-dropdown {
+  position: absolute;
+  top: 45px;
+  left: 0;
+  width: 220px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+  border: 1px solid #e2e8f0;
+  max-height: 300px;
+  overflow-y: auto;
 }
+.search-item { padding: 10px; display: flex; justify-content: space-between; cursor: pointer; border-bottom: 1px solid #f1f5f9; }
+.search-item:hover { background: #f8fafc; }
 
-.color-dot:hover {
-  transform: scale(1.2);
-  border-color: #3b82f6;
-}
-
+/* 节点样式 */
 .node-box {
   background: white;
   border: 2px solid #cbd5e1;
   border-radius: 8px;
   padding: 10px 14px;
   transition: all 0.2s;
-  font-size: 14px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
 }
-.is-selected {
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15);
-}
+.is-selected { border-color: #3b82f6; box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15); }
+
+.separator { width: 1px; height: 20px; background: #e2e8f0; flex-shrink: 0; margin: 0 4px; }
+
+.color-picker { display: flex; gap: 4px; padding: 0 8px; flex-shrink: 0; border-left: 1px solid #e2e8f0; border-right: 1px solid #e2e8f0; }
+.color-dot { width: 20px; height: 20px; border-radius: 50%; border: 1px solid #e2e8f0; cursor: pointer; flex-shrink: 0; }
+.color-dot:hover { transform: scale(1.1); }
+
+.zoom-info { font-size: 13px; font-weight: bold; color: #64748b; min-width: 45px; flex-shrink: 0; }
 
 .collapse-btn {
-  position: absolute;
-  right: -8px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 18px;
-  height: 18px;
-  background: #3b82f6;
-  color: white;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  cursor: pointer;
-  border: 2px solid white;
-}
-
-.animate-in {
-  animation: slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-@keyframes slideIn {
-  from { opacity: 0; transform: translateY(-10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.help-tip {
-  position: absolute;
-  bottom: 15px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: rgba(255, 255, 255, 0.9);
-  padding: 4px 12px;
-  border-radius: 20px;
-  font-size: 11px;
-  color: #94a3b8;
-  border: 1px solid #e2e8f0;
-}
-
-.font-controls {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 0 8px;
-  border-left: 1px solid #e2e8f0;
-}
-
-.icon-btn {
-  background: transparent;
-  border: 1px solid transparent;
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 600;
-  color: #475569;
-  transition: all 0.2s;
-}
-
-.icon-btn:hover {
-  background: #f1f5f9;
-  color: #1e293b;
-}
-
-.icon-btn.active {
-  background: #e0f2fe;
-  color: #0284c7;
-  border-color: #bae6fd;
-}
-
-.bold-btn {
-  font-family: serif;
-  font-size: 14px;
-}
-/* 搜索组样式 */
-.search-group {
-  display: flex;
-  align-items: center;
-}
-
-.search-input-wrapper {
-  position: relative;
-  display: flex;
-  align-items: center;
-  background: #f1f5f9;
-  border-radius: 6px;
-  padding: 4px 8px;
-  width: 150px;
-  transition: width 0.3s;
-}
-
-.search-input-wrapper:focus-within {
-  width: 220px;
-  background: white;
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
-}
-
-.search-icon {
-  font-size: 12px;
-  margin-right: 6px;
-  color: #94a3b8;
-}
-
-.search-input {
-  border: none;
-  background: transparent;
-  outline: none;
-  font-size: 13px;
-  width: 100%;
-}
-
-/* 搜索下拉框 */
-.search-dropdown {
-  position: absolute;
-  top: calc(100% + 10px);
-  left: 0;
-  width: 100%;
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
-  border: 1px solid #e2e8f0;
-  overflow: hidden;
-  z-index: 1000;
-}
-
-.search-item {
-  padding: 8px 12px;
-  cursor: pointer;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  transition: background 0.2s;
-}
-
-.search-item:hover {
-  background: #f8fafc;
-}
-
-.res-text {
-  font-size: 13px;
-  color: #1e293b;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 140px;
-}
-
-.res-type {
-  font-size: 10px;
-  color: #94a3b8;
-  background: #f1f5f9;
-  padding: 2px 4px;
-  border-radius: 4px;
-}
-
-.no-res {
-  padding: 8px;
-  font-size: 12px;
-  color: #94a3b8;
-  text-align: center;
+  position: absolute; right: -9px; top: 50%; transform: translateY(-50%);
+  width: 18px; height: 18px; background: #3b82f6; color: white;
+  border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  font-size: 12px; cursor: pointer; border: 2px solid white;
 }
 </style>

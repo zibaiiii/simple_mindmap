@@ -16,14 +16,16 @@
 - **拖拽体验**：流畅的节点拖拽和画布平移
 - **快捷键支持**：双击编辑、Enter键确认
 - **剪贴板操作**：支持分支复制粘贴
+- **节点搜索功能**：支持搜索节点，即使节点被收起
 - **响应式设计**：自适应节点尺寸变化
+- **可滚动工具栏**：即使小窗口化浏览器也不影响工具栏使用，可以通过滚轮滚动来调整工具栏
 
 ### 🎨 视觉设计
 - **现代化UI**：毛玻璃效果工具栏、平滑动画
 - **视觉反馈**：选中高亮、悬停效果、操作提示
 - **网格背景**：辅助对齐的网格背景
 - **贝塞尔曲线**：美观的节点连接线
-- <img width="1166" height="840" alt="image" src="https://github.com/user-attachments/assets/14dccda7-5b4e-4a46-a996-311124ff2ac5" />
+
 
 
 ## 📦 安装依赖
@@ -38,54 +40,32 @@ npm install -D @types/katex
 
 ## 🚀 快速开始
 
-### 1. 导入组件
+### 1. 拉取项目文件
+1、新建一个空文件夹，尽量不要带英文
+2、在空文件夹中打开powershell
+3、拉取文件
+```bash
+git clone https://github.com/zibaiiii/simple_mindmap
+```
+### 2. 安装依赖
 
-```vue
-<template>
-  <MindMap />
-</template>
+```bash
+# 必需依赖
+npm install vue@3 katex
 
-<script setup>
-import MindMap from './components/MindMap.vue'
-</script>
+# 可选：TypeScript 类型支持
+npm install -D @types/katex
 ```
 
-### 2. 使用 Pinia Store（必需）
-
-创建 `stores/mindmap.ts`：
-
-```typescript
-import { defineStore } from 'pinia'
-
-export interface MindNode {
-  id: string
-  text: string
-  x: number
-  y: number
-  width?: number
-  height?: number
-  parentId: string | null
-  color?: string
-  isCollapsed?: boolean
-  isEditing?: boolean
-}
-
-export const useMindMapStore = defineStore('mindmap', {
-  state: () => ({
-    nodes: [] as MindNode[],
-    dragNodeId: null as string | null,
-    offset: { x: 0, y: 0 },
-    clipboard: [] as MindNode[]
-  }),
-  actions: {
-    // 实现以下方法：
-    // addRootNode(x, y), addChild(parentId), deleteNode(id)
-    // updateNodeColor(id, color), toggleCollapse(id)
-    // copyBranch(id), pasteBranch(parentId), autoLayout()
-    // updateNodeSize(id, width, height)
-  }
-})
+### 3. 运行
+在终端中输入
 ```
+npm run dev
+```
+
+### 4. 开始使用
+进入网页http://localhost:5173/
+
 
 ## 🎮 使用指南
 
