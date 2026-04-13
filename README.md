@@ -84,6 +84,7 @@ npm run dev
 - **分支操作**：选中节点 → 使用"复制/粘贴"操作整个分支
 - **自动布局**：点击工具栏"🪄 布局"按钮
 - **重置视角**：点击工具栏"🎯 重置"按钮
+- **搜索节点**：即使节点被折叠也可以搜索到
 
 ## 📝 技术细节
 
@@ -175,13 +176,6 @@ src/
 
 MIT License
 
-## 🤝 贡献指南
-
-1. Fork 项目
-2. 创建功能分支 (`git checkout -b feature/AmazingFeature`)
-3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
-4. 推送到分支 (`git push origin feature/AmazingFeature`)
-5. 开启 Pull Request
 
 ## 📞 支持
 
