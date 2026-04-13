@@ -26,18 +26,51 @@ export const useMindMapStore = defineStore('mindmap', {
     // 2. 剪贴板（用于复制粘贴）
     clipboard: [] as MindNode[],
     
-    // 3. 拖拽状态（这是你报错缺少的部分）
+    // 3. 拖拽状态
     dragNodeId: null as string | null,
-    offset: { x: 0, y: 0 }
+    offset: { x: 0, y: 0 },
+    
+    // 4. 历史记录状态
+    history: [] as string[], 
+    historyIndex: -1
   }),
 
   actions: {
-    //查找
+    // 保存当前快照
+    saveHistory() {
+      // 如果在回退过程中做了新操作，清空当前索引之后的记录
+      if (this.historyIndex < this.history.length - 1) {
+        this.history = this.history.slice(0, this.historyIndex + 1)
+      }
+      // 将当前状态存入历史
+      this.history.push(JSON.stringify(this.nodes))
+      // 限制历史堆栈大小为 50 步
+      if (this.history.length > 50) {
+        this.history.shift()
+      } else {
+        this.historyIndex++
+      }
+    },
+
+    undo() {
+      if (this.historyIndex > 0) {
+        this.historyIndex--
+        this.nodes = JSON.parse(this.history[this.historyIndex])
+      }
+    },
+
+    redo() {
+      if (this.historyIndex < this.history.length - 1) {
+        this.historyIndex++
+        this.nodes = JSON.parse(this.history[this.historyIndex])
+      }
+    },
+
+    // 查找并展开父节点 (纯 UI 行为，通常不计入撤销历史)
     expandToNode(nodeId: string) {
       const node = this.nodes.find(n => n.id === nodeId)
       if (!node || !node.parentId) return
 
-      // 递归向上将所有父节点设为非折叠状态
       let currentParentId = node.parentId
       while (currentParentId) {
         const parent = this.nodes.find(n => n.id === currentParentId)
@@ -48,13 +81,14 @@ export const useMindMapStore = defineStore('mindmap', {
           break
         }
       }
-    } ,
-    //更新字体大小
+    },
+
+    // 更新字体大小
     updateNodeFont(id: string, sizeDelta: number, toggleBold: boolean = false) {
       const node = this.nodes.find(n => n.id === id)
       if (node) {
+        this.saveHistory() // 变更前记录
         if (sizeDelta !== 0) {
-          // 限制字体大小在 12px - 32px 之间
           const currentSize = node.fontSize || 14
           node.fontSize = Math.min(Math.max(currentSize + sizeDelta, 12), 32)
         }
@@ -63,23 +97,27 @@ export const useMindMapStore = defineStore('mindmap', {
         }
       }
     },
-    // 更新节点文本气泡大小
+
+    // 更新节点尺寸 (由 ResizeObserver 触发)
     updateNodeSize(id: string, width: number, height: number) {
       const node = this.nodes.find(n => n.id === id)
       if (node) {
+        // 注意：尺寸更新过于频繁，通常不建议每一步都 saveHistory
         node.width = width
         node.height = height
       }
     },
-    // 更新节点气泡颜色
+
+    // 更新节点颜色
     updateNodeColor(id: string, color: string) {
       const node = this.nodes.find(n => n.id === id)
       if (node) {
-      node.color = color
+        this.saveHistory() // 变更前记录
+        node.color = color
       }
     },
 
-    // 更新节点位置
+    // 更新节点位置 (拖拽中调用，saveHistory 由 handleMouseUp 触发)
     updateNodePos(id: string, x: number, y: number) {
       const node = this.nodes.find(n => n.id === id)
       if (node) {
@@ -92,6 +130,8 @@ export const useMindMapStore = defineStore('mindmap', {
     addChild(parentId: string) {
       const parent = this.nodes.find(n => n.id === parentId)
       if (!parent) return
+      this.saveHistory() // 变更前记录
+      
       const newNode: MindNode = {
         id: Date.now().toString(),
         text: '新分支',
@@ -100,14 +140,15 @@ export const useMindMapStore = defineStore('mindmap', {
         parentId: parentId,
         isEditing: true,
         isCollapsed: false, 
-        width: 60,         // 给一个默认宽度
-        height: 40          // 给一个默认高度
+        width: 60,
+        height: 40
       }
       this.nodes.push(newNode)
     },
 
     // 删除节点及其子树
     deleteNode(id: string) {
+      this.saveHistory() // 变更前记录
       const idsToDelete: string[] = []
       const collect = (nodeId: string) => {
         idsToDelete.push(nodeId)
@@ -117,7 +158,7 @@ export const useMindMapStore = defineStore('mindmap', {
       this.nodes = this.nodes.filter(n => !idsToDelete.includes(n.id))
     },
 
-    // 复制分支
+    // 复制 (不涉及数据变更，无需记录历史)
     copyBranch(id: string) {
       const subtree: MindNode[] = []
       const collect = (nodeId: string) => {
@@ -128,14 +169,16 @@ export const useMindMapStore = defineStore('mindmap', {
         }
       }
       collect(id)
-      this.clipboard = JSON.parse(JSON.stringify(subtree)) // 深拷贝
+      this.clipboard = JSON.parse(JSON.stringify(subtree))
     },
 
-    // 粘贴分支
+    // 粘贴
     pasteBranch(newParentId: string) {
       if (this.clipboard.length === 0) return
       const parent = this.nodes.find(n => n.id === newParentId)
       if (!parent) return
+
+      this.saveHistory() // 变更前记录
 
       const idMap = new Map<string, string>()
       this.clipboard.forEach(node => {
@@ -155,55 +198,57 @@ export const useMindMapStore = defineStore('mindmap', {
         this.nodes.push(newNode)
       })
     },
-    // 切换折叠状态
+
+    // 切换折叠
     toggleCollapse(id: string) {
+      this.saveHistory() // 变更前记录
       const node = this.nodes.find(n => n.id === id)
       if (node) {
         node.isCollapsed = !node.isCollapsed
       }
     },
 
-    // 自动布局算法 (简单的树状布局)
+    // 自动布局
     autoLayout() {
-        const HORIZONTAL_MARGIN = 100
-        const VERTICAL_GAP = 80
-        let currentY = 100 
-    
-        const layout = (nodeId: string, parentRightEdge: number) => {
-          const node = this.nodes.find(n => n.id === nodeId)
-          if (!node) return
-          node.x = parentRightEdge + (parentRightEdge > 60 ? HORIZONTAL_MARGIN : 0)
-          const children = this.nodes.filter(n => n.parentId === nodeId)
-          const nodeWidth = node.width || 150
-          const nodeRightEdge = node.x + nodeWidth
+      this.saveHistory() // 变更前记录
+      const HORIZONTAL_MARGIN = 100
+      const VERTICAL_GAP = 80
+      let currentY = 100 
+
+      const layout = (nodeId: string, parentRightEdge: number) => {
+        const node = this.nodes.find(n => n.id === nodeId)
+        if (!node) return
+        node.x = parentRightEdge + (parentRightEdge > 60 ? HORIZONTAL_MARGIN : 0)
+        const children = this.nodes.filter(n => n.parentId === nodeId)
         
-          if (children.length === 0 || node.isCollapsed) {
-            node.y = currentY
-            currentY += VERTICAL_GAP
-          } else {
-            children.forEach(child => layout(child.id, nodeRightEdge))
-            const firstChild = children[0]
-            const lastChild = children[children.length - 1]
-            if (firstChild && lastChild) {
-              node.y = (firstChild.y + lastChild.y) / 2
-            }
+        if (children.length === 0 || node.isCollapsed) {
+          node.y = currentY
+          currentY += VERTICAL_GAP
+        } else {
+          children.forEach(child => layout(child.id, node.x + (node.width || 150)))
+          const firstChild = children[0]
+          const lastChild = children[children.length - 1]
+          if (firstChild && lastChild) {
+            node.y = (firstChild.y + lastChild.y) / 2
           }
         }
+      }
       
-        // 找出所有根节点（没有 parentId 的节点）
-        const roots = this.nodes.filter(n => !n.parentId)
-        roots.forEach(root => {
-          layout(root.id, 50) // 每个根节点都从左侧 50 开始布局
-          currentY += 40 // 不同根节点之间留出额外间距
-        })
+      const roots = this.nodes.filter(n => !n.parentId)
+      roots.forEach(root => {
+        layout(root.id, 50)
+        currentY += 40
+      })
     },
-      // 双击创建新根节点
+
+    // 添加根节点
     addRootNode(x: number, y: number) {
+      this.saveHistory() // 变更前记录
       const newNode: MindNode = {
         id: Date.now().toString(),
         text: '新主题',
-        x: x - 75, // 居中放置（假设宽度150）
-        y: y - 20, // 居中放置
+        x: x - 75,
+        y: y - 20,
         width: 150,
         height: 40,
         parentId: null,
@@ -212,4 +257,4 @@ export const useMindMapStore = defineStore('mindmap', {
       this.nodes.push(newNode)
     }
   }
-})  
+})
