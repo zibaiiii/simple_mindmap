@@ -1,4 +1,3 @@
-// src/stores/mindmap.ts
 import { defineStore } from 'pinia'
 
 export interface MindNode {
@@ -10,33 +9,54 @@ export interface MindNode {
   isEditing: boolean
   width: number   // 气泡宽度
   height: number  // 气泡高度
-  isCollapsed?: boolean //是否收起子节点
+  isCollapsed?: boolean // 是否收起子节点
   color?: string // 节点背景颜色
   fontSize?: number;   // 字体大小 (px)
   isBold?: boolean;    // 是否加粗
 }
 
 export const useMindMapStore = defineStore('mindmap', {
-  state: () => ({
-    // 1. 节点数据
-    nodes: [
-      { id: 'root', text: '中心主题', x: 300, y: 300, width: 150, height: 40, parentId: null, isEditing: false }
-    ] as MindNode[],
+  state: () => {
+    // 1. 初始化时尝试从本地存储加载数据
+    const localData = localStorage.getItem('mindmap_data')
+    let initialNodes: MindNode[]
     
-    // 2. 剪贴板（用于复制粘贴）
-    clipboard: [] as MindNode[],
-    
-    // 3. 拖拽状态
-    dragNodeId: null as string | null,
-    offset: { x: 0, y: 0 },
-    
-    // 4. 历史记录状态
-    history: [] as string[], 
-    historyIndex: -1
-  }),
+    try {
+      if (localData) {
+        initialNodes = JSON.parse(localData)
+      } else {
+        // 默认初始节点
+        initialNodes = [
+          { id: 'root', text: '中心主题', x: 300, y: 300, width: 150, height: 40, parentId: null, isEditing: false }
+        ]
+      }
+    } catch (e) {
+      console.error("解析本地存储数据失败", e)
+      initialNodes = [{ id: 'root', text: '中心主题', x: 300, y: 300, width: 150, height: 40, parentId: null, isEditing: false }]
+    }
+
+    return {
+      // 核心数据
+      nodes: initialNodes,
+      
+      // 临时状态（不需要持久化）
+      clipboard: [] as MindNode[],
+      dragNodeId: null as string | null,
+      offset: { x: 0, y: 0 },
+      
+      // 历史记录堆栈
+      history: [] as string[], 
+      historyIndex: -1
+    }
+  },
 
   actions: {
-    // 保存当前快照
+    // --- 持久化辅助 ---
+    persist() {
+      localStorage.setItem('mindmap_data', JSON.stringify(this.nodes))
+    },
+
+    // --- 历史记录管理 ---
     saveHistory() {
       // 如果在回退过程中做了新操作，清空当前索引之后的记录
       if (this.historyIndex < this.history.length - 1) {
@@ -50,12 +70,14 @@ export const useMindMapStore = defineStore('mindmap', {
       } else {
         this.historyIndex++
       }
+      this.persist()
     },
 
     undo() {
       if (this.historyIndex > 0) {
         this.historyIndex--
         this.nodes = JSON.parse(this.history[this.historyIndex])
+        this.persist()
       }
     },
 
@@ -63,10 +85,42 @@ export const useMindMapStore = defineStore('mindmap', {
       if (this.historyIndex < this.history.length - 1) {
         this.historyIndex++
         this.nodes = JSON.parse(this.history[this.historyIndex])
+        this.persist()
       }
     },
 
-    // 查找并展开父节点 (纯 UI 行为，通常不计入撤销历史)
+    // --- 导入导出功能 ---
+    exportJSON() {
+      const data = JSON.stringify(this.nodes, null, 2);
+      const blob = new Blob([data], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `mindmap-${new Date().getTime()}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+    },
+
+    importJSON(jsonString: string) {
+      try {
+        const importedNodes = JSON.parse(jsonString);
+        if (Array.isArray(importedNodes)) {
+          this.saveHistory(); // 导入前存档
+          this.nodes = importedNodes;
+          // 导入后重置历史堆栈防止引用混乱
+          this.history = [JSON.stringify(this.nodes)];
+          this.historyIndex = 0;
+          this.persist();
+          return true;
+        }
+      } catch (e) {
+        console.error("导入失败:", e);
+        return false;
+      }
+      return false;
+    },
+
+    // --- 节点操作 ---
     expandToNode(nodeId: string) {
       const node = this.nodes.find(n => n.id === nodeId)
       if (!node || !node.parentId) return
@@ -81,13 +135,13 @@ export const useMindMapStore = defineStore('mindmap', {
           break
         }
       }
+      this.persist()
     },
 
-    // 更新字体大小
     updateNodeFont(id: string, sizeDelta: number, toggleBold: boolean = false) {
       const node = this.nodes.find(n => n.id === id)
       if (node) {
-        this.saveHistory() // 变更前记录
+        this.saveHistory()
         if (sizeDelta !== 0) {
           const currentSize = node.fontSize || 14
           node.fontSize = Math.min(Math.max(currentSize + sizeDelta, 12), 32)
@@ -95,42 +149,33 @@ export const useMindMapStore = defineStore('mindmap', {
         if (toggleBold) {
           node.isBold = !node.isBold
         }
+        this.persist()
       }
     },
 
-    // 更新节点尺寸 (由 ResizeObserver 触发)
     updateNodeSize(id: string, width: number, height: number) {
       const node = this.nodes.find(n => n.id === id)
       if (node) {
-        // 注意：尺寸更新过于频繁，通常不建议每一步都 saveHistory
         node.width = width
         node.height = height
+        // 尺寸更新频繁，不在此处调用 saveHistory
+        this.persist()
       }
     },
 
-    // 更新节点颜色
     updateNodeColor(id: string, color: string) {
       const node = this.nodes.find(n => n.id === id)
       if (node) {
-        this.saveHistory() // 变更前记录
+        this.saveHistory()
         node.color = color
+        this.persist()
       }
     },
 
-    // 更新节点位置 (拖拽中调用，saveHistory 由 handleMouseUp 触发)
-    updateNodePos(id: string, x: number, y: number) {
-      const node = this.nodes.find(n => n.id === id)
-      if (node) {
-        node.x = x
-        node.y = y
-      }
-    },
-
-    // 添加子节点
     addChild(parentId: string) {
       const parent = this.nodes.find(n => n.id === parentId)
       if (!parent) return
-      this.saveHistory() // 变更前记录
+      this.saveHistory()
       
       const newNode: MindNode = {
         id: Date.now().toString(),
@@ -140,15 +185,15 @@ export const useMindMapStore = defineStore('mindmap', {
         parentId: parentId,
         isEditing: true,
         isCollapsed: false, 
-        width: 60,
+        width: 100,
         height: 40
       }
       this.nodes.push(newNode)
+      this.persist()
     },
 
-    // 删除节点及其子树
     deleteNode(id: string) {
-      this.saveHistory() // 变更前记录
+      this.saveHistory()
       const idsToDelete: string[] = []
       const collect = (nodeId: string) => {
         idsToDelete.push(nodeId)
@@ -156,9 +201,10 @@ export const useMindMapStore = defineStore('mindmap', {
       }
       collect(id)
       this.nodes = this.nodes.filter(n => !idsToDelete.includes(n.id))
+      this.persist()
     },
 
-    // 复制 (不涉及数据变更，无需记录历史)
+    // --- 剪贴板操作 ---
     copyBranch(id: string) {
       const subtree: MindNode[] = []
       const collect = (nodeId: string) => {
@@ -170,19 +216,20 @@ export const useMindMapStore = defineStore('mindmap', {
       }
       collect(id)
       this.clipboard = JSON.parse(JSON.stringify(subtree))
+      // 注意：复制不需要 persist
     },
 
-    // 粘贴
     pasteBranch(newParentId: string) {
       if (this.clipboard.length === 0) return
       const parent = this.nodes.find(n => n.id === newParentId)
       if (!parent) return
 
-      this.saveHistory() // 变更前记录
+      this.saveHistory()
 
       const idMap = new Map<string, string>()
-      this.clipboard.forEach(node => {
-        idMap.set(node.id, Date.now().toString() + Math.random().toString())
+      const timestamp = Date.now()
+      this.clipboard.forEach((node, idx) => {
+        idMap.set(node.id, `${timestamp}-${idx}`)
       })
 
       this.clipboard.forEach((oldNode, index) => {
@@ -197,20 +244,20 @@ export const useMindMapStore = defineStore('mindmap', {
         }
         this.nodes.push(newNode)
       })
+      this.persist()
     },
 
-    // 切换折叠
     toggleCollapse(id: string) {
-      this.saveHistory() // 变更前记录
       const node = this.nodes.find(n => n.id === id)
       if (node) {
+        this.saveHistory()
         node.isCollapsed = !node.isCollapsed
+        this.persist()
       }
     },
 
-    // 自动布局
     autoLayout() {
-      this.saveHistory() // 变更前记录
+      this.saveHistory()
       const HORIZONTAL_MARGIN = 100
       const VERTICAL_GAP = 80
       let currentY = 100 
@@ -239,11 +286,11 @@ export const useMindMapStore = defineStore('mindmap', {
         layout(root.id, 50)
         currentY += 40
       })
+      this.persist()
     },
 
-    // 添加根节点
     addRootNode(x: number, y: number) {
-      this.saveHistory() // 变更前记录
+      this.saveHistory()
       const newNode: MindNode = {
         id: Date.now().toString(),
         text: '新主题',
@@ -255,6 +302,7 @@ export const useMindMapStore = defineStore('mindmap', {
         isEditing: true
       }
       this.nodes.push(newNode)
+      this.persist()
     }
   }
 })
