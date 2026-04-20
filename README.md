@@ -40,6 +40,9 @@
 - `Ctrl+Z` / `Cmd+Z`：撤销
 - `Ctrl+Y` / `Cmd+Y`：重做
 - `Enter`：搜索框内按回车聚焦第一个结果
+### 界面预览
+<img width="1410" height="615" alt="58851c70027e71f7eac6d4670be144aa" src="https://github.com/user-attachments/assets/300e4ed9-185a-4d52-934a-0aaa28522f0e" />
+
 
 ## 🚀 技术栈
 
